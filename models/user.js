@@ -6,8 +6,6 @@ const db = require('../db')
 
 const { BCRYPT_WORK_FACTOR } = require('../config')
 
-let current_timestamp = new Date()
-
 class User {
 	constructor(username, first_name, last_name, phone) {
 		this.username = username
@@ -19,10 +17,9 @@ class User {
 	 *    {username, password, first_name, last_name, phone}
 	 */
 
-	static async register({ username, password, first_name, last_name, phone }) {
+	static async register(username, password, first_name, last_name, phone) {
 		// Hash Password
 		const hashedPassword = await bcrypt.hash(password, BCRYPT_WORK_FACTOR)
-		console.log('HASHED PASSWORD', hashedPassword)
 		// Save to DB
 		const result = await db.query(
 			`INSERT INTO users (username, password, first_name, last_name, phone, join_at)
@@ -30,19 +27,20 @@ class User {
        RETURNING username, first_name, last_name, join_at`,
 			[username, hashedPassword, first_name, last_name, phone]
 		)
-		console.log(username, hashedPassword, first_name, last_name, phone)
 		return result.rows[0]
 	}
 
 	/** Authenticate: is this username/password valid? Returns boolean. */
 
 	static async authenticate(username, password) {
-		const result = await db.query(`SELECT username, password FROM users WHERE username = $1`, [
-			username
-		])
-		if (!result.rows[0]) false
-		const pw = bcrypt.compare(password, result.rows[0].password)
-		return pw
+		const result = await db.query(
+			`SELECT username, password
+       FROM users
+       WHERE username = $1`,
+			[username]
+		)
+		const pw = await bcrypt.compare(password, result.rows[0].password)
+		return result.rows[0] && pw
 	}
 
 	/** Update last_login_at for user */
@@ -50,7 +48,10 @@ class User {
 	static async updateLoginTimestamp(username) {
 		if (!username) throw new ExpressError('Username not found!', 400)
 		const result = db.query(
-			`UPDATE users SET last_login_at = $1 WHERE username = $2 RETURNING username, last_login_at`,
+			`UPDATE users
+       SET last_login_at = $1
+       WHERE username = $2
+       RETURNING username, last_login_at`,
 			[current_timestamp, username]
 		)
 		return result.rows[0]
@@ -60,7 +61,11 @@ class User {
 	 * [{username, first_name, last_name, phone}, ...] */
 
 	static async all() {
-		const result = await db.query(`SELECT username, first_name, last_name, phone FROM users`)
+		const result = await db.query(
+			`SELECT username, first_name, last_name, phone
+       FROM users`
+		)
+		// return result.rows
 		const user = result.rows.map((u) => new User(u.username, u.first_name, u.last_name, u.phone))
 		return user
 	}
@@ -76,7 +81,8 @@ class User {
 
 	static async get(username) {
 		const result = await db.query(
-			`SELECT username, first_name, last_name, phone, join_at, last_login_at WHERE username = $1`,
+			`SELECT username, first_name, last_name, phone, join_at, last_login_at
+       WHERE username = $1`,
 			[username]
 		)
 		const user = result.rows[0]
@@ -113,7 +119,28 @@ class User {
 	 *   {id, first_name, last_name, phone}
 	 */
 
-	static async messagesTo(username) {}
+	static async messagesTo(username) {
+		const result = await db.query(
+			`SELECT msg.id, msg.from_username, msg.body, msg.sent_at, msg.read_at, u.first_name, u.last_name, u.phone,
+       FROM messages AS msg
+       JOIN users AS u ON msg.from_username = u.username
+       WHERE to_username = $1`,
+			[username]
+		)
+
+		return result.rows.map((msg) => ({
+			id: msg.id,
+			from_user: {
+				username: msg.from_username,
+				first_name: msg.first_name,
+				last_name: msg.last_name,
+				phone: msg.phone
+			},
+			body: msg.body,
+			sent_at: msg.sent_at,
+			read_at: msg.read_at
+		}))
+	}
 }
 
 module.exports = User

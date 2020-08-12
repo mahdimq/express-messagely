@@ -20,12 +20,12 @@ app.use(authenticateJWT)
 /** routes */
 
 const authRoutes = require('./routes/auth')
-// const userRoutes = require('./routes/users')
-// const messageRoutes = require('./routes/messages')
+const userRoutes = require('./routes/users')
+const msgRoutes = require('./routes/messages')
 
 app.use('/auth', authRoutes)
-// app.use('/users', userRoutes)
-// app.use('/messages', messageRoutes)
+app.use('/users', userRoutes)
+app.use('/messages', msgRoutes)
 
 /** 404 handler */
 
